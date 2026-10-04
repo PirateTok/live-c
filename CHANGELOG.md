@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0
+
+- Builds on `piratetok-live-rs` 0.5. New error codes: `PIRATETOK_ERR_API_ERROR` (12, non-zero statusCode), `PIRATETOK_ERR_TIKTOK_BLOCKED` (13, HTTP 403/429 / empty / non-JSON), `PIRATETOK_ERR_PROXY` (14).
+- `piratetok_client_set_proxy` now also takes `socks5://` / `socks5h://` and `user:pass@` for both HTTP and the WSS tunnel (via live-rs 0.5; proven there by `proxy_test` + `client_offline_test`).
+- `piratetok_fetch_room_audience` with `anchor_id == NULL` resolves the anchor from room info (`AnchorId::FromRoomInfo`).
+
 ## 0.3.0
 
 ### Breaking (C ABI)

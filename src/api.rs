@@ -1,7 +1,7 @@
 use std::ffi::c_char;
 
 use piratetok_live_rs::http::api::{
-    fetch_room_audience, fetch_room_id, fetch_room_info, FetchParams,
+    fetch_room_audience, fetch_room_id, fetch_room_info, AnchorId, FetchParams,
 };
 
 use crate::codes::{fail_ffi, fail_live, Code};
@@ -102,13 +102,20 @@ pub unsafe extern "C" fn piratetok_fetch_room_audience(
     };
     match runtime
         .rt
-        .block_on(fetch_room_audience(room, as_option(anchor), params))
+        .block_on(fetch_room_audience(room, to_anchor(anchor), params))
     {
         Ok(audience) => emit_json(out_json, serde_json::to_string(&audience)),
         Err(e) => {
             tracing::warn!(error = %e, "fetch_room_audience failed");
             fail_live(&e)
         }
+    }
+}
+
+fn to_anchor(arg: CStrArg<'_>) -> AnchorId<'_> {
+    match arg {
+        CStrArg::Given(id) => AnchorId::Known(id),
+        CStrArg::Absent => AnchorId::FromRoomInfo,
     }
 }
 

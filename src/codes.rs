@@ -18,6 +18,9 @@ impl Code {
     pub const WEBSOCKET: i32 = 9;
     pub const ALREADY_RUNNING: i32 = 10;
     pub const SESSION_REQUIRED: i32 = 11;
+    pub const API_ERROR: i32 = 12;
+    pub const TIKTOK_BLOCKED: i32 = 13;
+    pub const PROXY: i32 = 14;
     pub const INTERNAL: i32 = 99;
 }
 
@@ -28,6 +31,9 @@ pub fn of_live(e: &TikTokLiveError) -> i32 {
         TikTokLiveError::DeviceBlocked => Code::DEVICE_BLOCKED,
         TikTokLiveError::AgeRestricted(..) => Code::AGE_RESTRICTED,
         TikTokLiveError::SessionRequired(..) => Code::SESSION_REQUIRED,
+        TikTokLiveError::ApiError(..) => Code::API_ERROR,
+        TikTokLiveError::TikTokBlocked(..) => Code::TIKTOK_BLOCKED,
+        TikTokLiveError::Proxy(..) => Code::PROXY,
         TikTokLiveError::InvalidResponse(..) => Code::INVALID_RESPONSE,
         TikTokLiveError::ConnectionClosed => Code::CONNECTION_CLOSED,
         TikTokLiveError::Http(..) => Code::HTTP,

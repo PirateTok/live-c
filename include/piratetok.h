@@ -37,6 +37,9 @@ typedef enum {
     PIRATETOK_ERR_WEBSOCKET       = 9,
     PIRATETOK_ERR_ALREADY_RUNNING = 10,
     PIRATETOK_ERR_SESSION_REQUIRED= 11,  /* login-gated endpoint called without session cookies */
+    PIRATETOK_ERR_API_ERROR       = 12,  /* TikTok API returned a non-zero statusCode (see last_error) */
+    PIRATETOK_ERR_TIKTOK_BLOCKED  = 13,  /* HTTP 403/429, empty or non-JSON body: IP/fingerprint/rate/geo block */
+    PIRATETOK_ERR_PROXY           = 14,  /* proxy handshake failed (CONNECT rejected, socks5 error) */
     PIRATETOK_ERR_INTERNAL        = 99
 } PirateTokError;
 

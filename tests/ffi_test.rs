@@ -197,6 +197,20 @@ fn absent_fields_serialize_as_null() {
 }
 
 #[test]
+fn spec_errors_have_their_own_codes() {
+    assert_eq!(fail_live(&TikTokLiveError::ApiError(4003)), Code::API_ERROR);
+    assert_eq!(
+        fail_live(&TikTokLiveError::TikTokBlocked("http 429".into())),
+        Code::TIKTOK_BLOCKED
+    );
+    assert!(last_error().contains("429"));
+    assert_eq!(
+        fail_live(&TikTokLiveError::Proxy("CONNECT rejected with 407".into())),
+        Code::PROXY
+    );
+}
+
+#[test]
 fn session_required_has_its_own_code() {
     let code = fail_live(&TikTokLiveError::SessionRequired("login".into()));
     assert_eq!(code, Code::SESSION_REQUIRED);
