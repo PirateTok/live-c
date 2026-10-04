@@ -85,14 +85,27 @@ See [`include/piratetok.h`](include/piratetok.h) for the full C header.
 - `piratetok_client_set_cdn(c, PIRATETOK_CDN_EU)`
 - `piratetok_client_set_timeout_ms(c, 15000)`
 - `piratetok_client_set_max_retries(c, 10)`
+- `piratetok_client_set_heartbeat_ms(c, 10000)` / `piratetok_client_set_stale_timeout_ms(c, 60000)`
 - `piratetok_client_set_proxy(c, "socks5://127.0.0.1:1080")`
+- `piratetok_client_set_user_agent(c, "...")` / `piratetok_client_set_cookies(c, "sessionid=...; sid_tt=...")`
+- `piratetok_client_set_language(c, "de")` / `piratetok_client_set_region(c, "DE")` (default: system locale)
+- `piratetok_client_set_compress(c, 0)` (default 1)
 
 **Utilities:**
-- `piratetok_check_online(rt, username, &room_id)` -- check if user is live
-- `piratetok_fetch_room_info(rt, room_id, cookies, &json)` -- fetch room metadata
+- `piratetok_check_online(rt, username, &room_id, &anchor_id)` -- check if user is live (`anchor_id` may be `NULL`)
+- `piratetok_fetch_room_info(rt, room_id, cookies, &json)` -- fetch room metadata (cookies only for 18+)
+- `piratetok_fetch_room_audience(rt, room_id, anchor_id, cookies, &json)` -- full named viewer roster (login-gated, `PIRATETOK_ERR_SESSION_REQUIRED` without cookies)
 - `piratetok_string_free(s)` -- free strings returned by utilities
 
-Events arrive as null-terminated JSON on a background thread via the callback. The `PirateTokEventType` enum matches the event types from the Rust lib.
+Events arrive as null-terminated JSON on a background thread via the callback. The `PirateTokEventType` enum matches the event types from the Rust lib. `ROOM_USER_SEQ` JSON includes `top_viewers` (the top-viewers box, sorted by rank). Absent optional fields are `null`.
+
+Reconnects reuse the ttwid and only rotate it on `DEVICE_BLOCKED` or a connection that died within 30 s; a missing ttwid cookie is retried 8×750 ms before it counts as a failed attempt; `max_retries` counts consecutive failures (a 30 s healthy session resets it).
+
+## Tests
+
+```bash
+cargo test   # offline FFI tests: setters → Rust config, top_viewers JSON, error codes, argument validation
+```
 
 ## Examples
 
@@ -105,6 +118,7 @@ gcc -o basic_chat basic_chat.c -L../target/release -lpiratetok -lpthread -ldl -l
 gcc -o online_check online_check.c -L../target/release -lpiratetok -lpthread -ldl -lm
 gcc -o stream_info stream_info.c -L../target/release -lpiratetok -lpthread -ldl -lm
 gcc -o gift_tracker gift_tracker.c -L../target/release -lpiratetok -lpthread -ldl -lm
+gcc -o audience audience.c -L../target/release -lpiratetok -lpthread -ldl -lm
 ```
 
 Run (set library path first):
@@ -115,6 +129,7 @@ export LD_LIBRARY_PATH=../target/release
 ./online_check <username>     # check if user is live
 ./stream_info <username>      # fetch room metadata + stream URLs
 ./gift_tracker <username>     # track gifts as JSON
+./audience <username> [cookies]  # full roster (login-gated) + live top-viewers box
 ```
 
 ## License

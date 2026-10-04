@@ -1,19 +1,20 @@
 [package]
 name = "piratetok-live-c"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "C ABI bindings for piratetok-live-rs — use TikTok Live from any language with C FFI"
 authors = ["Zmole Cristian"]
 license = "0BSD"
 repository = "https://github.com/PirateTok/live-c"
+homepage = "https://piratetok.rosint.org"
 readme = "README.md"
 
 [lib]
 name = "piratetok"
-crate-type = ["cdylib", "staticlib"]
+crate-type = ["cdylib", "staticlib", "rlib"]
 
 [dependencies]
-piratetok-live-rs = { path = "../live-rs" }
+piratetok-live-rs = "0.4"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
 serde_json = "1"
 tracing = "0.1"

@@ -28,7 +28,7 @@ int main(int argc, char** argv) {
     }
 
     char* room_id = NULL;
-    PirateTokError err = piratetok_check_online(rt, username, &room_id);
+    PirateTokError err = piratetok_check_online(rt, username, &room_id, NULL);
     if (err != PIRATETOK_OK) {
         fprintf(stderr, "check_online failed (code %d): %s\n", err, piratetok_last_error());
         piratetok_shutdown(rt);

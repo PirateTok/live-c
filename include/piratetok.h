@@ -36,6 +36,7 @@ typedef enum {
     PIRATETOK_ERR_HTTP            = 8,
     PIRATETOK_ERR_WEBSOCKET       = 9,
     PIRATETOK_ERR_ALREADY_RUNNING = 10,
+    PIRATETOK_ERR_SESSION_REQUIRED= 11,  /* login-gated endpoint called without session cookies */
     PIRATETOK_ERR_INTERNAL        = 99
 } PirateTokError;
 
@@ -137,6 +138,18 @@ void piratetok_client_set_stale_timeout_ms(PirateTokClient* c, uint32_t ms);
 void piratetok_client_set_proxy(PirateTokClient* c, const char* proxy_url);
 void piratetok_client_set_user_agent(PirateTokClient* c, const char* ua);
 void piratetok_client_set_cookies(PirateTokClient* c, const char* cookies);
+/* language/region default to the system locale; NULL is rejected (see piratetok_last_error) */
+void piratetok_client_set_language(PirateTokClient* c, const char* language);
+void piratetok_client_set_region(PirateTokClient* c, const char* region);
+/* request gzip WSS frames (default 1); decode handles both either way */
+void piratetok_client_set_compress(PirateTokClient* c, int enabled);
+
+/* Event JSON notes:
+ *  - absent optional fields are JSON null (not "" or 0)
+ *  - CYCLED_EVENT_ROOM_USER_SEQ carries "top_viewers": [{rank, score, delta, user}]
+ *    — the top-viewers box next to the counter, sorted by rank, no cookies needed
+ *  - reconnects reuse the ttwid; a missing ttwid cookie is retried 8x750ms before
+ *    counting as a failed attempt; max_retries counts consecutive failures only */
 
 /* ---- connection ---- */
 
@@ -153,12 +166,14 @@ PirateTokError piratetok_disconnect(PirateTokClient* client);
 
 /* ---- standalone utilities (blocking calls) ---- */
 
-/* Check if a user is online. On success, writes the room_id string.
- * Caller must free the returned string with piratetok_string_free(). */
+/* Check if a user is online. On success, writes the room_id string and,
+ * if out_anchor_id is not NULL, the streamer's user id (needed by
+ * piratetok_fetch_room_audience). Free both with piratetok_string_free(). */
 PirateTokError piratetok_check_online(
     PirateTokRuntime* rt,
     const char*       username,
-    char**            out_room_id
+    char**            out_room_id,
+    char**            out_anchor_id
 );
 
 /* Fetch room info as JSON. cookies may be NULL (needed only for 18+ rooms).
@@ -170,9 +185,23 @@ PirateTokError piratetok_fetch_room_info(
     char**            out_json
 );
 
+/* Full audience roster (every named viewer) as JSON:
+ * {"total","anonymous","viewers":[{rank,score,user_id,username,nickname,sec_uid,
+ *   avatar_url,follower_count,verified,is_follower,is_following,is_subscriber}],"raw_json"}
+ * Login-gated: cookies ("sessionid=...; sid_tt=...") are required, otherwise
+ * PIRATETOK_ERR_SESSION_REQUIRED. anchor_id may be NULL (resolved via room info).
+ * Caller must free the returned string with piratetok_string_free(). */
+PirateTokError piratetok_fetch_room_audience(
+    PirateTokRuntime* rt,
+    const char*       room_id,
+    const char*       anchor_id,
+    const char*       cookies,
+    char**            out_json
+);
+
 /* ---- memory management ---- */
 
-/* Free a string returned by piratetok_check_online / piratetok_fetch_room_info. */
+/* Free a string returned by piratetok_check_online / _fetch_room_info / _fetch_room_audience. */
 void piratetok_string_free(char* s);
 
 /* ---- error info ---- */

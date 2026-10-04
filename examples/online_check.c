@@ -26,7 +26,7 @@ int main(int argc, char** argv) {
 
     for (int i = 1; i < argc; i++) {
         char* room_id = NULL;
-        PirateTokError err = piratetok_check_online(rt, argv[i], &room_id);
+        PirateTokError err = piratetok_check_online(rt, argv[i], &room_id, NULL);
 
         if (err == PIRATETOK_OK) {
             printf("  LIVE  @%s — room %s\n", argv[i], room_id);
