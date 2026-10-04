@@ -75,9 +75,60 @@ typedef enum {
     CYCLED_EVENT_POLL          = 41,
     CYCLED_EVENT_ENVELOPE      = 42,
     CYCLED_EVENT_ROOM_PIN      = 43,
+    CYCLED_EVENT_UNAUTHORIZED_MEMBER = 44,
+    CYCLED_EVENT_LINK_MIC_METHOD     = 45,
+    CYCLED_EVENT_LINK_MIC_BATTLE     = 46,
+    CYCLED_EVENT_LINK_MIC_ARMIES     = 47,
+    CYCLED_EVENT_LINK_MESSAGE        = 48,
+    CYCLED_EVENT_LINK_LAYER          = 49,
+    CYCLED_EVENT_LINK_MIC_LAYOUT_STATE = 50,
+    CYCLED_EVENT_GIFT_PANEL_UPDATE   = 51,
+    CYCLED_EVENT_IN_ROOM_BANNER      = 52,
+    CYCLED_EVENT_GUIDE               = 53,
 
-    /* everything else */
-    CYCLED_EVENT_OTHER         = 200,
+    /* extended */
+    CYCLED_EVENT_EMOTE_CHAT          = 60,
+    CYCLED_EVENT_QUESTION_NEW        = 61,
+    CYCLED_EVENT_SUB_NOTIFY          = 62,
+    CYCLED_EVENT_BARRAGE             = 63,
+    CYCLED_EVENT_HOURLY_RANK         = 64,
+    CYCLED_EVENT_MSG_DETECT          = 65,
+    CYCLED_EVENT_LINK_MIC_FAN_TICKET = 66,
+    CYCLED_EVENT_ROOM_VERIFY         = 67,
+    CYCLED_EVENT_OEC_LIVE_SHOPPING   = 68,
+    CYCLED_EVENT_GIFT_BROADCAST      = 69,
+    CYCLED_EVENT_RANK_TEXT           = 70,
+    CYCLED_EVENT_GIFT_DYNAMIC_RESTRICTION = 71,
+    CYCLED_EVENT_VIEWER_PICKS_UPDATE = 72,
+
+    /* secondary */
+    CYCLED_EVENT_SYSTEM_MESSAGE      = 80,
+    CYCLED_EVENT_LIVE_GAME_INTRO     = 81,
+    CYCLED_EVENT_ACCESS_CONTROL      = 82,
+    CYCLED_EVENT_ACCESS_RECALL       = 83,
+    CYCLED_EVENT_ALERT_BOX_AUDIT_RESULT = 84,
+    CYCLED_EVENT_BINDING_GIFT        = 85,
+    CYCLED_EVENT_BOOST_CARD          = 86,
+    CYCLED_EVENT_BOTTOM_MESSAGE      = 87,
+    CYCLED_EVENT_GAME_RANK_NOTIFY    = 88,
+    CYCLED_EVENT_GIFT_PROMPT         = 89,
+    CYCLED_EVENT_LINK_STATE          = 90,
+    CYCLED_EVENT_LINK_MIC_BATTLE_PUNISH_FINISH = 91,
+    CYCLED_EVENT_LINKMIC_BATTLE_TASK = 92,
+    CYCLED_EVENT_MARQUEE_ANNOUNCEMENT = 93,
+    CYCLED_EVENT_NOTICE              = 94,
+    CYCLED_EVENT_NOTIFY              = 95,
+    CYCLED_EVENT_PARTNERSHIP_DROPS_UPDATE = 96,
+    CYCLED_EVENT_PARTNERSHIP_GAME_OFFLINE = 97,
+    CYCLED_EVENT_PARTNERSHIP_PUNISH  = 98,
+    CYCLED_EVENT_PERCEPTION          = 99,
+    CYCLED_EVENT_SPEAKER             = 100,
+    CYCLED_EVENT_SUB_CAPSULE         = 101,
+    CYCLED_EVENT_SUB_PIN_EVENT       = 102,
+    CYCLED_EVENT_SUBSCRIPTION_NOTIFY = 103,
+    CYCLED_EVENT_TOAST               = 104,
+
+    /* any message type not decoded by live-rs: JSON has "method" + "payload_b64" */
     CYCLED_EVENT_UNKNOWN       = 255
 } PirateTokEventType;
 
@@ -145,6 +196,14 @@ void piratetok_client_set_region(PirateTokClient* c, const char* region);
 void piratetok_client_set_compress(PirateTokClient* c, int enabled);
 
 /* Event JSON notes:
+ *  - every event: "type" (variant name), "type_id" (PirateTokEventType) and, for
+ *    message events, "payload_b64" = the full protobuf message (decode any field)
+ *  - common events also carry decoded fields; users carry badges[{scene,level,...}],
+ *    follower_count/following_count, fans club, follow flags
+ *  - GIFT: "streak" {streak_id,is_active,is_final,event_gift_count,total_gift_count,
+ *    event_diamond_count,total_diamond_count} (GiftStreakTracker, per client)
+ *  - LIKE: "like_stats" {event_like_count,total_like_count (monotonic),
+ *    accumulated_count,went_backwards} (LikeAccumulator, per client)
  *  - absent optional fields are JSON null (not "" or 0)
  *  - CYCLED_EVENT_ROOM_USER_SEQ carries "top_viewers": [{rank, score, delta, user}]
  *    — the top-viewers box next to the counter, sorted by rank, no cookies needed
@@ -196,6 +255,17 @@ PirateTokError piratetok_fetch_room_audience(
     const char*       room_id,
     const char*       anchor_id,
     const char*       cookies,
+    char**            out_json
+);
+
+/* Profile (HD avatars + metadata) scraped from the profile page, cached per
+ * runtime (ProfileCache, 5 min TTL, negative cache for private/not-found) as JSON:
+ * {user_id,unique_id,nickname,bio,avatar_thumb,avatar_medium,avatar_large,verified,
+ *  private_account,is_organization,room_id,bio_link,follower_count,following_count,
+ *  heart_count,video_count,friend_count}. Free with piratetok_string_free(). */
+PirateTokError piratetok_fetch_profile(
+    PirateTokRuntime* rt,
+    const char*       username,
     char**            out_json
 );
 

@@ -1,72 +1,111 @@
+use piratetok_live_rs::helpers::gift_streak::{GiftStreakEvent, GiftStreakTracker};
+use piratetok_live_rs::helpers::like_accumulator::{LikeAccumulator, LikeStats};
 use piratetok_live_rs::structs::proto::messages::{
     Contributor, WebcastGiftMessage, WebcastRoomUserSeqMessage,
 };
 use piratetok_live_rs::structs::proto::user::UserIdentity;
 use piratetok_live_rs::structs::TikTokLiveEvent;
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 
-pub struct EventType;
+use crate::catalog::{describe, payload_b64};
 
-impl EventType {
-    pub const CONNECTED: i32 = 0;
-    pub const RECONNECTING: i32 = 1;
-    pub const DISCONNECTED: i32 = 2;
-    pub const CHAT: i32 = 10;
-    pub const GIFT: i32 = 11;
-    pub const LIKE: i32 = 12;
-    pub const MEMBER: i32 = 13;
-    pub const SOCIAL: i32 = 14;
-    pub const ROOM_USER_SEQ: i32 = 15;
-    pub const CONTROL: i32 = 16;
-    pub const FOLLOW: i32 = 20;
-    pub const SHARE: i32 = 21;
-    pub const JOIN: i32 = 22;
-    pub const LIVE_ENDED: i32 = 23;
-    pub const LIVE_INTRO: i32 = 30;
-    pub const ROOM_MESSAGE: i32 = 31;
-    pub const CAPTION: i32 = 32;
-    pub const GOAL_UPDATE: i32 = 33;
-    pub const IM_DELETE: i32 = 34;
-    pub const RANK_UPDATE: i32 = 40;
-    pub const POLL: i32 = 41;
-    pub const ENVELOPE: i32 = 42;
-    pub const ROOM_PIN: i32 = 43;
-    pub const OTHER: i32 = 200;
-    pub const UNKNOWN: i32 = 255;
+pub struct EventEnricher {
+    gifts: GiftStreakTracker,
+    likes: LikeAccumulator,
 }
 
-pub fn event_to_type_id(ev: &TikTokLiveEvent) -> i32 {
-    match ev {
-        TikTokLiveEvent::Connected { .. } => EventType::CONNECTED,
-        TikTokLiveEvent::Reconnecting { .. } => EventType::RECONNECTING,
-        TikTokLiveEvent::Disconnected => EventType::DISCONNECTED,
-        TikTokLiveEvent::Chat(..) => EventType::CHAT,
-        TikTokLiveEvent::Gift(..) => EventType::GIFT,
-        TikTokLiveEvent::Like(..) => EventType::LIKE,
-        TikTokLiveEvent::Member(..) => EventType::MEMBER,
-        TikTokLiveEvent::Social(..) => EventType::SOCIAL,
-        TikTokLiveEvent::RoomUserSeq(..) => EventType::ROOM_USER_SEQ,
-        TikTokLiveEvent::Control(..) => EventType::CONTROL,
-        TikTokLiveEvent::Follow(..) => EventType::FOLLOW,
-        TikTokLiveEvent::Share(..) => EventType::SHARE,
-        TikTokLiveEvent::Join(..) => EventType::JOIN,
-        TikTokLiveEvent::LiveEnded(..) => EventType::LIVE_ENDED,
-        TikTokLiveEvent::LiveIntro(..) => EventType::LIVE_INTRO,
-        TikTokLiveEvent::RoomMessage(..) => EventType::ROOM_MESSAGE,
-        TikTokLiveEvent::Caption(..) => EventType::CAPTION,
-        TikTokLiveEvent::GoalUpdate(..) => EventType::GOAL_UPDATE,
-        TikTokLiveEvent::ImDelete(..) => EventType::IM_DELETE,
-        TikTokLiveEvent::RankUpdate(..) => EventType::RANK_UPDATE,
-        TikTokLiveEvent::Poll(..) => EventType::POLL,
-        TikTokLiveEvent::Envelope(..) => EventType::ENVELOPE,
-        TikTokLiveEvent::RoomPin(..) => EventType::ROOM_PIN,
-        TikTokLiveEvent::Unknown { .. } => EventType::UNKNOWN,
-        _ => EventType::OTHER,
+impl EventEnricher {
+    pub fn new() -> Self {
+        Self {
+            gifts: GiftStreakTracker::new(),
+            likes: LikeAccumulator::new(),
+        }
+    }
+
+    pub fn json(&mut self, ev: &TikTokLiveEvent) -> String {
+        let mut value = event_value(ev);
+        match ev {
+            TikTokLiveEvent::Gift(msg) => value["streak"] = streak_json(&self.gifts.process(msg)),
+            TikTokLiveEvent::Like(msg) => {
+                value["like_stats"] = like_stats_json(&self.likes.process(msg))
+            }
+            _ => {}
+        }
+        value.to_string()
     }
 }
 
-pub fn event_to_json(ev: &TikTokLiveEvent) -> String {
-    let value = match ev {
+pub fn event_type_id(ev: &TikTokLiveEvent) -> i32 {
+    describe(ev).id
+}
+
+pub fn event_value(ev: &TikTokLiveEvent) -> Value {
+    let described = describe(ev);
+    let mut out = Map::new();
+    out.insert("type".into(), json!(described.name));
+    out.insert("type_id".into(), json!(described.id));
+    if !described.payload.is_empty() {
+        out.insert("payload_b64".into(), json!(payload_b64(&described)));
+    }
+    if let Value::Object(fields) = detail_json(ev) {
+        out.extend(fields);
+    }
+    Value::Object(out)
+}
+
+pub fn user_json(user: &UserIdentity) -> Value {
+    let fans_club = user.fans_club.as_ref().and_then(|fc| fc.data.as_ref());
+    let follow = user.follow_info.as_ref();
+    let badges: Vec<Value> = user
+        .badge_list
+        .iter()
+        .map(|b| json!({ "scene": b.badge_scene, "display_type": b.display_type, "display": b.display, "level": b.log_extra.as_ref().map(|x| x.level.as_str()) }))
+        .collect();
+    json!({
+        "user_id": user.user_id,
+        "id_str": user.id_str,
+        "sec_uid": user.sec_uid,
+        "nickname": user.nickname,
+        "unique_id": user.unique_id,
+        "bio": user.bio_description,
+        "verified": user.verified,
+        "follow_status": user.follow_status,
+        "is_follower": user.is_follower,
+        "is_following": user.is_following,
+        "is_subscribe": user.is_subscribe,
+        "follower_count": follow.map(|f| f.follower_count),
+        "following_count": follow.map(|f| f.following_count),
+        "avatar": user.avatar_thumb.as_ref().and_then(|img| img.url_list.first()),
+        "fans_club_level": fans_club.map(|d| d.level),
+        "fans_club_name": fans_club.map(|d| d.club_name.as_str()),
+        "top_vip_no": user.top_vip_no,
+        "pay_score": user.pay_score,
+        "badges": badges,
+    })
+}
+
+pub fn contributor_json(c: &Contributor) -> Value {
+    json!({ "rank": c.rank, "score": c.score, "delta": c.delta, "user": c.user.as_ref().map(user_json) })
+}
+
+fn streak_json(s: &GiftStreakEvent) -> Value {
+    json!({
+        "streak_id": s.streak_id,
+        "is_active": s.is_active,
+        "is_final": s.is_final,
+        "event_gift_count": s.event_gift_count,
+        "total_gift_count": s.total_gift_count,
+        "event_diamond_count": s.event_diamond_count,
+        "total_diamond_count": s.total_diamond_count,
+    })
+}
+
+fn like_stats_json(s: &LikeStats) -> Value {
+    json!({ "event_like_count": s.event_like_count, "total_like_count": s.total_like_count, "accumulated_count": s.accumulated_count, "went_backwards": s.went_backwards })
+}
+
+fn detail_json(ev: &TikTokLiveEvent) -> Value {
+    match ev {
         TikTokLiveEvent::Connected { room_id } => json!({ "room_id": room_id }),
         TikTokLiveEvent::Reconnecting {
             attempt,
@@ -80,32 +119,7 @@ pub fn event_to_json(ev: &TikTokLiveEvent) -> String {
             json!({ "method": method, "payload_len": payload.len() })
         }
         other => social_json(other),
-    };
-    value.to_string()
-}
-
-pub fn user_json(user: &UserIdentity) -> Value {
-    let fans_club = user.fans_club.as_ref().and_then(|fc| fc.data.as_ref());
-    json!({
-        "user_id": user.user_id,
-        "nickname": user.nickname,
-        "unique_id": user.unique_id,
-        "bio": user.bio_description,
-        "verified": user.verified,
-        "follow_status": user.follow_status,
-        "is_follower": user.is_follower,
-        "is_following": user.is_following,
-        "is_subscribe": user.is_subscribe,
-        "avatar": user.avatar_thumb.as_ref().and_then(|img| img.url_list.first()),
-        "fans_club_level": fans_club.map(|d| d.level),
-        "fans_club_name": fans_club.map(|d| d.club_name.as_str()),
-        "top_vip_no": user.top_vip_no,
-        "pay_score": user.pay_score,
-    })
-}
-
-pub fn contributor_json(c: &Contributor) -> Value {
-    json!({ "rank": c.rank, "score": c.score, "delta": c.delta, "user": c.user.as_ref().map(user_json) })
+    }
 }
 
 fn room_user_seq_json(msg: &WebcastRoomUserSeqMessage) -> Value {
@@ -181,6 +195,6 @@ fn social_json(ev: &TikTokLiveEvent) -> Value {
                 .collect();
             json!({ "captions": captions, "msg_id": msg.common.as_ref().map(|c| c.msg_id) })
         }
-        other => json!({ "event": format!("{other:?}").chars().take(200).collect::<String>() }),
+        other => json!({ "debug": format!("{other:?}").chars().take(200).collect::<String>() }),
     }
 }

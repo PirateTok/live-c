@@ -1,15 +1,20 @@
+use piratetok_live_rs::helpers::profile_cache::ProfileCache;
 use tokio::runtime::Runtime;
 
 use crate::last_error;
 
 pub struct PirateTokRuntime {
     pub rt: Runtime,
+    pub profiles: ProfileCache,
 }
 
 #[no_mangle]
 pub extern "C" fn piratetok_init() -> *mut PirateTokRuntime {
     match Runtime::new() {
-        Ok(rt) => Box::into_raw(Box::new(PirateTokRuntime { rt })),
+        Ok(rt) => Box::into_raw(Box::new(PirateTokRuntime {
+            rt,
+            profiles: ProfileCache::new(),
+        })),
         Err(e) => {
             tracing::error!(error = %e, "failed to create tokio runtime");
             last_error::set(&format!("failed to create runtime: {e}"));

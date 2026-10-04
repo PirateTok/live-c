@@ -95,16 +95,18 @@ See [`include/piratetok.h`](include/piratetok.h) for the full C header.
 - `piratetok_check_online(rt, username, &room_id, &anchor_id)` -- check if user is live (`anchor_id` may be `NULL`)
 - `piratetok_fetch_room_info(rt, room_id, cookies, &json)` -- fetch room metadata (cookies only for 18+)
 - `piratetok_fetch_room_audience(rt, room_id, anchor_id, cookies, &json)` -- full named viewer roster (login-gated, `PIRATETOK_ERR_SESSION_REQUIRED` without cookies)
+- `piratetok_fetch_profile(rt, username, &json)` -- profile metadata + HD avatars (cached per runtime)
 - `piratetok_string_free(s)` -- free strings returned by utilities
 
-Events arrive as null-terminated JSON on a background thread via the callback. The `PirateTokEventType` enum matches the event types from the Rust lib. `ROOM_USER_SEQ` JSON includes `top_viewers` (the top-viewers box, sorted by rank). Absent optional fields are `null`.
+Events arrive as null-terminated JSON on a background thread via the callback. `PirateTokEventType` has an id for every event the Rust lib decodes (64 typed + lifecycle + Unknown). Every event JSON carries `type`, `type_id` and, for messages, `payload_b64` (the full protobuf, so any field is reachable); common events also carry decoded fields. `ROOM_USER_SEQ` includes `top_viewers` (sorted by rank), `GIFT` includes `streak` (per-event deltas), `LIKE` includes `like_stats` (monotonic totals). Users carry badges/levels and follower counts. Absent optional fields are `null`.
 
 Reconnects reuse the ttwid and only rotate it on `DEVICE_BLOCKED` or a connection that died within 30 s; a missing ttwid cookie is retried 8×750 ms before it counts as a failed attempt; `max_retries` counts consecutive failures (a 30 s healthy session resets it).
 
 ## Tests
 
 ```bash
-cargo test   # offline FFI tests: setters → Rust config, top_viewers JSON, error codes, argument validation
+ln -s ../live-rs/testdata testdata   # or PIRATETOK_TESTDATA=/path (needs captures/ + manifests/)
+cargo test   # offline: FFI setters/errors/top_viewers/badges/helpers + replay of all captures vs manifests
 ```
 
 ## Examples
@@ -119,6 +121,8 @@ gcc -o online_check online_check.c -L../target/release -lpiratetok -lpthread -ld
 gcc -o stream_info stream_info.c -L../target/release -lpiratetok -lpthread -ldl -lm
 gcc -o gift_tracker gift_tracker.c -L../target/release -lpiratetok -lpthread -ldl -lm
 gcc -o audience audience.c -L../target/release -lpiratetok -lpthread -ldl -lm
+gcc -o gift_streak gift_streak.c -L../target/release -lpiratetok -lpthread -ldl -lm
+gcc -o profile_lookup profile_lookup.c -L../target/release -lpiratetok -lpthread -ldl -lm
 ```
 
 Run (set library path first):
@@ -130,6 +134,8 @@ export LD_LIBRARY_PATH=../target/release
 ./stream_info <username>      # fetch room metadata + stream URLs
 ./gift_tracker <username>     # track gifts as JSON
 ./audience <username> [cookies]  # full roster (login-gated) + live top-viewers box
+./gift_streak <username>      # per-event gift deltas (GiftStreakTracker)
+./profile_lookup <username>   # profile + HD avatars, second round from cache
 ```
 
 ## License

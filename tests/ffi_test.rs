@@ -10,11 +10,88 @@ use piratetok::client::{
 use piratetok::codes::{fail_live, Code};
 use piratetok::last_error::piratetok_last_error;
 use piratetok::runtime::{piratetok_init, piratetok_shutdown};
-use piratetok::serialize::{event_to_json, event_to_type_id, EventType};
+use piratetok::serialize::{event_type_id, event_value, EventEnricher};
 use piratetok_live_rs::errors::TikTokLiveError;
-use piratetok_live_rs::structs::proto::messages::{Contributor, WebcastRoomUserSeqMessage};
+use piratetok_live_rs::structs::proto::messages::{
+    Contributor, WebcastGiftMessage, WebcastLikeMessage, WebcastRoomUserSeqMessage,
+};
+use piratetok_live_rs::structs::proto::types::{BadgeStruct, FollowInfo, PrivilegeLogExtra};
 use piratetok_live_rs::structs::proto::user::UserIdentity;
 use piratetok_live_rs::structs::TikTokLiveEvent;
+
+fn event_to_json(ev: &TikTokLiveEvent) -> String {
+    event_value(ev).to_string()
+}
+
+#[test]
+fn enricher_tracks_gift_streaks_and_likes() {
+    let mut enricher = EventEnricher::new();
+    let gift = |repeat: i32, end: i32| {
+        let mut g = WebcastGiftMessage {
+            group_id: 42,
+            gift_id: 5655,
+            repeat_count: repeat,
+            repeat_end: end,
+            ..Default::default()
+        };
+        g.gift_details = Some(Default::default());
+        g.gift_details.as_mut().unwrap().gift_type = 1;
+        g.gift_details.as_mut().unwrap().diamond_count = 5;
+        TikTokLiveEvent::Gift(g)
+    };
+    let deltas: Vec<(i64, bool, i64)> = [gift(1, 0), gift(3, 0), gift(3, 1)]
+        .iter()
+        .map(|ev| {
+            let v: serde_json::Value = serde_json::from_str(&enricher.json(ev)).unwrap();
+            (
+                v["streak"]["event_gift_count"].as_i64().unwrap(),
+                v["streak"]["is_final"].as_bool().unwrap(),
+                v["streak"]["total_diamond_count"].as_i64().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(deltas, vec![(1, false, 5), (2, false, 15), (0, true, 15)]);
+
+    let like = |count: i32, total: i64| {
+        TikTokLiveEvent::Like(WebcastLikeMessage {
+            like_count: count,
+            total_like_count: total,
+            ..Default::default()
+        })
+    };
+    let mut last = serde_json::Value::Null;
+    for ev in [like(5, 100), like(3, 90), like(2, 120)] {
+        last = serde_json::from_str(&enricher.json(&ev)).unwrap();
+    }
+    assert_eq!(last["like_stats"]["total_like_count"], 120);
+    assert_eq!(last["like_stats"]["accumulated_count"], 10);
+}
+
+#[test]
+fn user_json_carries_badges_and_follow_info() {
+    let user = UserIdentity {
+        nickname: "a".into(),
+        follow_info: Some(FollowInfo {
+            follower_count: 77,
+            following_count: 3,
+            ..Default::default()
+        }),
+        badge_list: vec![BadgeStruct {
+            badge_scene: 8,
+            display: true,
+            log_extra: Some(PrivilegeLogExtra {
+                level: "21".into(),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let v = piratetok::serialize::user_json(&user);
+    assert_eq!(v["follower_count"], 77);
+    assert_eq!(v["badges"][0]["scene"], 8);
+    assert_eq!(v["badges"][0]["level"], "21");
+}
 
 fn last_error() -> String {
     unsafe { CStr::from_ptr(piratetok_last_error()) }
@@ -93,7 +170,7 @@ fn room_user_seq_json_carries_sorted_top_viewers() {
         ..Default::default()
     };
     let event = TikTokLiveEvent::RoomUserSeq(msg);
-    assert_eq!(event_to_type_id(&event), EventType::ROOM_USER_SEQ);
+    assert_eq!(event_type_id(&event), 15);
     let json: serde_json::Value = serde_json::from_str(&event_to_json(&event)).unwrap();
     let top = json["top_viewers"].as_array().unwrap();
     let names: Vec<&str> = top

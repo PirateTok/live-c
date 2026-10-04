@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.3.0
+
+### Breaking (C ABI)
+- `PirateTokEventType`: every live-rs event variant has its own id now (44–53, 60–72, 80–104); `CYCLED_EVENT_OTHER` (200) is gone.
+- Event JSON keys: `type`, `type_id`, `payload_b64` on every event; the `{"event": "<debug>"}` fallback became `"debug"` next to the full payload.
+
+### Added (parity with live-rs)
+- Full protobuf payload (`payload_b64`) for every message event, Tier A/B and Unknown alike, so callers can decode any field.
+- Enriched user JSON: `badges[{scene,display_type,display,level}]`, `follower_count`, `following_count`, `id_str`, `sec_uid`.
+- GIFT `streak` (GiftStreakTracker) and LIKE `like_stats` (LikeAccumulator), tracked per client.
+- `piratetok_fetch_profile(rt, username, &json)`: ProfileCache per runtime.
+- Examples: `gift_streak.c`, `profile_lookup.c`.
+- Tests: `tests/replay_test.rs` replays all 6 live-testdata captures through the C JSON layer and checks event counts, sub-routing, like stats event by event, and gift streak groups against the manifests exactly. It fails if `testdata/` is missing. `catalog` test: 68 unique variant ids.
+
 ## 0.2.0
 
 ### Fixed

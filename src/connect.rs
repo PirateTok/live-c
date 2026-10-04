@@ -6,10 +6,11 @@ use piratetok_live_rs::structs::TikTokLiveEvent;
 use piratetok_live_rs::{TikTokLive, TikTokLiveBuilder};
 use tokio::sync::Notify;
 
+use crate::catalog::Lifecycle;
 use crate::client::PirateTokClient;
 use crate::codes::Code;
 use crate::last_error;
-use crate::serialize::{event_to_json, event_to_type_id, EventType};
+use crate::serialize::{event_type_id, EventEnricher};
 
 pub type RawCallback = unsafe extern "C" fn(i32, *const c_char, usize, *mut c_void);
 
@@ -106,16 +107,17 @@ async fn pump(builder: TikTokLiveBuilder, stop: Arc<Notify>, ctx: CallbackCtx) {
             tracing::warn!(error = %e, "connect failed");
             fire(
                 &ctx,
-                EventType::DISCONNECTED,
+                Lifecycle::DISCONNECTED,
                 &serde_json::json!({ "error": e.to_string() }).to_string(),
             );
             return;
         }
     };
+    let mut enricher = EventEnricher::new();
     loop {
         tokio::select! {
             () = stop.notified() => {
-                fire(&ctx, EventType::DISCONNECTED, r#"{"reason":"user_disconnect"}"#);
+                fire(&ctx, Lifecycle::DISCONNECTED, r#"{"reason":"user_disconnect"}"#);
                 break;
             }
             event = stream.next_event() => {
@@ -123,11 +125,11 @@ async fn pump(builder: TikTokLiveBuilder, stop: Arc<Notify>, ctx: CallbackCtx) {
                     Ok(event) => event,
                     Err(e) => {
                         tracing::warn!(error = %e, "event stream closed");
-                        fire(&ctx, EventType::DISCONNECTED, r#"{"reason":"stream_ended"}"#);
+                        fire(&ctx, Lifecycle::DISCONNECTED, r#"{"reason":"stream_ended"}"#);
                         break;
                     }
                 };
-                fire(&ctx, event_to_type_id(&event), &event_to_json(&event));
+                fire(&ctx, event_type_id(&event), &enricher.json(&event));
                 if matches!(event, TikTokLiveEvent::Disconnected) {
                     break;
                 }
